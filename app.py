@@ -1,6 +1,6 @@
 import csv
 from extensions import db
-from flask import Flask, jsonify
+from flask import Flask
 import os
 from models import Features
 
@@ -19,12 +19,14 @@ def etl():
                                            ['experiment_id', 'user_id', 'experiment_compound_ids',
                                             'experiment_run_time'])
     users_map = {}
+    # Create an id -> obj map to more easily reference users and compounds
     for user in users:
         users_map[user['user_id']] = user
     compounds_map = {}
     for compound in compounds:
         compounds_map[compound['compound_id']] = compound
     # Process files to derive features
+    # Get intermediate data used to compute the final features
     intermediate = {}
     for exp in user_experiments:
         user_id = exp['user_id']
@@ -38,7 +40,7 @@ def etl():
             if compound_id not in intermediate[user_id]['compounds_used'].keys():
                 intermediate[user_id]['compounds_used'][compound_id] = 0
             intermediate[user_id]['compounds_used'][compound_id] += 1
-    # Upload processed data into a database
+    # Compute the final features for each user
     for user_id, data in intermediate.items():
         user_name = users_map[user_id]['name']
         num_total_experiments = data['num_experiments']
@@ -55,6 +57,7 @@ def etl():
                 most_used_compound_total = compound_amount
         average_experiments_amount = num_total_compounds / num_total_experiments
         most_experimented_compound = ','.join([compounds_map[compound_id]['compound_name'] for compound_id in most_used_compounds])
+    # Upload processed data into a database
         db.session.add(Features(user_name, num_total_experiments, average_experiments_amount, most_experimented_compound))
     db.session.commit()
 
@@ -79,8 +82,3 @@ def trigger_etl():
     # Trigger your ETL process here
     etl()
     return {"message": "ETL process started"}, 200
-
-
-@app.route("/")
-def hello_world():
-    return jsonify(hello="world")
